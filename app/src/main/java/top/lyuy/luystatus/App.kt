@@ -10,19 +10,13 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
-
-
         ApiProvider.init(this)
-
-
         startQueueWorker()
     }
 
     private fun startQueueWorker() {
         val request = OneTimeWorkRequestBuilder<QueueWorker>()
             .build()
-
-
         WorkManager.getInstance(this)
             .enqueueUniqueWork(
                 "queue_poll_worker",

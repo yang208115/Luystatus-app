@@ -18,9 +18,7 @@ class PopReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "PopReceiver"
-
         private const val PREF_NAME = "queue_worker"
-
         private const val KEY_SESSION_ID = "session_id"
         private const val KEY_LAST_CONFIRMED_INDEX = "last_confirmed_index"
         private const val KEY_PENDING_INDEX = "pending_index"
@@ -49,7 +47,7 @@ class PopReceiver : BroadcastReceiver() {
         val currentSession = prefs.getInt(KEY_SESSION_ID, 0)
         val pending = prefs.getLong(KEY_PENDING_INDEX, -1L)
 
-        // ✅ 只允许确认当前 pending 的事件
+        //  只允许确认当前 pending 的事件
         if (sessionId != currentSession || index != pending) {
             Log.w(
                 TAG,
@@ -95,11 +93,11 @@ class PopReceiver : BroadcastReceiver() {
         val pending = prefs.getLong(KEY_PENDING_INDEX, -1L)
         if (pending < 0) return
 
-        prefs.edit()
-            .putLong(KEY_LAST_CONFIRMED_INDEX, pending)
-            .putLong(KEY_PENDING_INDEX, -1L)
-            .putLong(KEY_LAST_NOTIFY_TIME, 0L)
-            .apply()
+        prefs.edit {
+            putLong(KEY_LAST_CONFIRMED_INDEX, pending)
+                .putLong(KEY_PENDING_INDEX, -1L)
+                .putLong(KEY_LAST_NOTIFY_TIME, 0L)
+        }
 
         NotificationHelper.cancelQueueNotification(context)
 

@@ -25,9 +25,7 @@ object ApiProvider {
             .getString("api_key", null)
     }
 
-    /**
-     * 动态添加 Header
-     */
+   //添加Header
     private val authInterceptor = Interceptor { chain ->
         val apiKey = getApiKey()
 
@@ -40,7 +38,7 @@ object ApiProvider {
 
         chain.proceed(builder.build())
     }
-
+    //启动okhttp客户端
     private val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
