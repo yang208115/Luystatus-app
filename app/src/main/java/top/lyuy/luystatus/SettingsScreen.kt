@@ -21,6 +21,17 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import androidx.core.content.edit
 
+private fun checkNotificationPermission(context: Context): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    } else {
+        true
+    }
+}
+
 @Preview
 @Composable
 fun SettingsScreen() {
@@ -40,16 +51,15 @@ fun SettingsScreen() {
     var apiKeyVisible by remember { mutableStateOf(false) }
 
     //  新增：通知权限状态
-    val notificationPermissionGranted = remember {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
+    var notificationPermissionGranted by remember {
+        mutableStateOf(checkNotificationPermission(context))
     }
+
+    LaunchedEffect(Unit) {
+        notificationPermissionGranted =
+            checkNotificationPermission(context)
+    }
+
 
     // Snackbar
     val snackbarHostState = remember { SnackbarHostState() }
