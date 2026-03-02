@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.launch
 import androidx.core.content.edit
+
+
 
 private fun checkNotificationPermission(context: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -136,11 +139,23 @@ fun SettingsScreen() {
 
                     scope.launch {
                         snackbarHostState.showSnackbar("保存成功")
+                        Log.d("SettingsScreen","apikey保存成功")
                     }
                 },
                 enabled = apiKey.isNotBlank()
             ) {
                 Text("保存")
+            }
+            Button(
+                onClick = {
+                    QueueWorker.enqueueImmediate(context)
+
+                    scope.launch {
+                        snackbarHostState.showSnackbar("已立即查询一次")
+                    }
+                }
+            ) {
+                Text("立即查询")
             }
         }
     }

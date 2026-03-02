@@ -33,7 +33,38 @@ class QueueWorker(
         private const val KEY_PENDING_INDEX = "pending_index"
         private const val KEY_FIRST_NOTIFY_TIME = "first_notify_time"
         private const val KEY_LAST_NOTIFY_TIME = "last_notify_time"
+
+        fun enqueueImmediate(context: Context) {
+            val request = OneTimeWorkRequestBuilder<QueueWorker>()
+                .build()
+
+            WorkManager.getInstance(context)
+                .enqueueUniqueWork(
+                    "QueueWorkerImmediate",
+                    ExistingWorkPolicy.REPLACE,
+                    request
+                )
+        }
     }
+
+    /**
+     * WorkManager 的核心执行入口。
+     *
+     * 职责说明：
+     * - 轮询后端 Queue API
+     * - 维护本地队列状态（session / pending / confirmed）
+     * - 根据时间与状态决定是否发送通知
+     * - 保证通知频率受控，避免刷屏
+     * - 在任何结果下都调度下一次轮询
+     *
+     * 设计原则：
+     * - 本 Worker 使用 OneTimeWork + 自行 enqueue 的方式模拟定时任务，
+     *   以获得更精细的失败重试与调度控制
+     *
+     * 注意：
+     * - Worker 可能在任意线程 / 任意时间被系统调用
+     * - 任何异常都会触发 retry，但不会中断后续轮询的调度
+     */
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
@@ -47,6 +78,8 @@ class QueueWorker(
             val items = listResponse.items
             if (items.isEmpty()) {
                 result = Result.success()
+                Log.e(TAG,"list列表为空")
+                Log.e(TAG,"item=$items")
             } else {
                 var sessionId = prefs.getInt(KEY_SESSION_ID, 0)
                 var lastConfirmed = prefs.getLong(KEY_LAST_CONFIRMED_INDEX, -1L)
@@ -142,7 +175,6 @@ class QueueWorker(
     }
 
 
-
     /**
      * 构造通知展示内容
      * 注意：
@@ -151,48 +183,54 @@ class QueueWorker(
      */
     private fun buildNotificationContent(data: JsonObject?): String {
         Log.d(TAG, "raw data:$data")
+
         if (data == null || data.entrySet().isEmpty()) {
             return "收到一个 Queue 事件"
         }
 
         val timestamp = data.get("timestamp")?.let {
             when {
-                it.isJsonPrimitive && it.asJsonPrimitive.isNumber -> it.asLong
+                it.isJsonPrimitive && it.asJsonPrimitive.isNumber ->
+                    it.asLong
                 it.isJsonPrimitive && it.asJsonPrimitive.isString ->
                     parseIsoTime(it.asString)
-
                 else -> null
             }
         }
 
         val name =
-            data.getAsJsonPrimitive("name")?.asString
-                ?: data.getAsJsonObject("site")
-                    ?.getAsJsonPrimitive("name")
-                    ?.asString
+            data.getStringOrNull("name")
+                ?: data.get("site")
+                    ?.asJsonObject
+                    ?.getStringOrNull("name")
 
         val customMessage =
-            data.getAsJsonPrimitive("customMessage")?.asString
+            data.getStringOrNull("customMessage")
 
-        // 都存在这些字段时只处理这些字段
-        if (timestamp != null && !name.isNullOrBlank() && !customMessage.isNullOrBlank()) {
+        if (timestamp != null && !name.isNullOrBlank()) {
             return buildString {
                 append("时间：").append(formatTime(timestamp)).append('\n')
-                append("名称：").append(name).append('\n')
-                append("消息：").append(customMessage)
+                append("名称：").append(name)
+                if (!customMessage.isNullOrBlank()) {
+                    append('\n')
+                    append("消息：").append(customMessage)
+                }
             }
         }
-        //否则，以key:value显示
+
+
+        // fallback：稳定 key:value 输出
         return buildString {
-            val entries = data.entrySet().toList()
-            entries.forEachIndexed { index, entry ->
-                append(entry.key).append(":")
+            data.entrySet().forEachIndexed { index, entry ->
+                append(entry.key).append(": ")
                 append(renderJsonValue(entry.value))
-                if (index != entries.lastIndex) append('\n')
+                if (index != data.entrySet().size - 1) append('\n')
             }
         }
     }
 
+
+    //将 JsonElement 渲染为稳定、可读的字符串
     private fun renderJsonValue(value: JsonElement): String =
         when {
             value.isJsonNull -> "null"
@@ -222,11 +260,20 @@ class QueueWorker(
         return sdf.format(Date(timestamp))
     }
 
+    private fun JsonObject.getStringOrNull(key: String): String? {
+        val e = get(key) ?: return null
+        if (!e.isJsonPrimitive) return null
+        val p = e.asJsonPrimitive
+        if (!p.isString) return null
+        return p.asString
+    }
+
+
     //25s轮询一次
-    private fun enqueueNext() {
-        Log.d("QueueWorker", "enqueue from:\n" + Log.getStackTraceString(Throwable()))
+     fun enqueueNext() {
+        //Log.d("QueueWorker", "enqueue from:\n" + Log.getStackTraceString(Throwable()))
         val request = OneTimeWorkRequestBuilder<QueueWorker>()
-            .setInitialDelay(25, TimeUnit.SECONDS)
+            .setInitialDelay(5, TimeUnit.SECONDS)
             .build()
 
         WorkManager.getInstance(applicationContext)

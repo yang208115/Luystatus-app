@@ -6,10 +6,7 @@ import retrofit2.http.Body
 import retrofit2.http.POST
 
 
-/**
- * Queue API
- * 所有接口均为 POST
- */
+
 interface Api {
 
     /**
