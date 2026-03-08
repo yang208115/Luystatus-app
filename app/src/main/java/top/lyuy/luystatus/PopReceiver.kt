@@ -13,6 +13,7 @@ import retrofit2.HttpException
 import top.lyuy.luystatus.api.ApiProvider
 import top.lyuy.luystatus.notify.NotificationHelper
 import androidx.core.content.edit
+import top.lyuy.luystatus.queue.QueueWorker
 
 class PopReceiver : BroadcastReceiver() {
 
