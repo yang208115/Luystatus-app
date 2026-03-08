@@ -4,11 +4,15 @@ import android.Manifest
 import android.content.Context
 import android.util.Log
 import androidx.annotation.RequiresPermission
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
 import top.lyuy.luystatus.api.ApiProvider
 import top.lyuy.luystatus.notify.NotificationHelper
 import java.util.concurrent.TimeUnit
@@ -31,6 +35,27 @@ class QueueWorker(
                     request
                 )
         }
+
+        fun enqueuePeriodic(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+
+            val request =
+                PeriodicWorkRequestBuilder<QueueWorker>(
+                    15, TimeUnit.MINUTES
+                )
+                    .setConstraints(constraints)
+                    .build()
+
+            WorkManager.getInstance(context)
+                .enqueueUniquePeriodicWork(
+                    "QueueWorkerPeriodic",
+                    ExistingPeriodicWorkPolicy.KEEP,
+                    request
+                )
+        }
+
     }
 
     /**
@@ -64,8 +89,8 @@ class QueueWorker(
      * - 即使异常，也会继续调度下一次轮询，保证轮询不中断
      *
      * 生命周期说明：
-     * - 本 Worker 采用 OneTimeWork + 自行 enqueue 的方式模拟定时轮询
-     * - 使用 ExistingWorkPolicy.KEEP 防止重复调度
+     * -  本 Worker 由 PeriodicWorkRequest 周期调度（15 分钟）
+     *  - 不在 Worker 内部进行任何调度操作
      *
      * 注意：
      * - Worker 可能在任意时间、任意线程被系统唤醒执行
@@ -74,6 +99,7 @@ class QueueWorker(
 
     @RequiresPermission(Manifest.permission.POST_NOTIFICATIONS)
     override suspend fun doWork(): Result {
+        Log.e("QueueWorker", "=== WORK EXECUTED ===")
 
         val prefs =
             applicationContext.getSharedPreferences(
@@ -83,7 +109,7 @@ class QueueWorker(
 
         try {
             val items = ApiProvider.api.list().items
-            Log.d("QueueWorker","item=$items")
+            Log.v("QueueWorker", "item=$items")
             val now = System.currentTimeMillis()
 
             val decision =
@@ -115,27 +141,13 @@ class QueueWorker(
                 }
             }
 
-            enqueueNext()
+            //enqueueNext()
             return Result.success()
 
         } catch (e: Exception) {
             Log.e(TAG, "queue poll failed", e)
-            enqueueNext()
+            //enqueueNext()
             return Result.retry()
         }
-    }
-
-    fun enqueueNext() {
-        val request =
-            OneTimeWorkRequestBuilder<QueueWorker>()
-                .setInitialDelay(25, TimeUnit.SECONDS)
-                .build()
-
-        WorkManager.getInstance(applicationContext)
-            .enqueueUniqueWork(
-                "QueueWorker",
-                ExistingWorkPolicy.KEEP,
-                request
-            )
     }
 }
